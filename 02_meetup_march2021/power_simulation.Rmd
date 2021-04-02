@@ -1,0 +1,181 @@
+---
+title: "a simple power simulation"
+output: html_document
+---
+
+### load some packages (first install if needed)
+
+```{r message=F}
+library(tidyverse) 
+library(reshape2)
+library(faux) #for simulation
+```
+
+### set means, sd(s), and correlation between repeated measures: linear trend in group means (within subjects design)
+
+these are the population parameters (or my best guesses for them):
+
+```{r}
+m1 <- 4.57
+
+m2 <- 5.23
+
+m3 <- 5.89
+
+sd <- 2.65 #same for all groups
+
+cor <- 0.35 #correlation between all pairs of groups
+```
+
+### question / problem:
+
+Given these population parameters, how many participants do I need to reliably detect the predicted pattern?
+
+### plan:
+
+* draw many samples from normal distribution with the population parameters defined above
+
+* see how often the desired result will be observed: significant linear trend, no significant quadratic trend 
+
+* try different sample sizes, find a sample size that has sufficient power (allows to reliably detect the effect)
+
+
+### Step 1: simulate just one dataset based on my parameters to see if it works correctly
+
+using the "rnorm_multi" function from faux package
+
+```{r}
+n <- 10000 #number of participants to simulate 
+
+#simulation of one dataset with predefined population parameters
+data <- rnorm_multi(n = n,
+                      mu = c(m1,m2,m3),
+                      sd = sd,
+                      r = cor,
+                      empirical = F)
+
+#look at the simulated dataset
+View(data)
+
+#check if parameters are correctly simulated (set n very high to be sure)
+
+#means and sds for each group
+mean(data$X1)
+sd(data$X1)
+
+mean(data$X2)
+sd(data$X2)
+  
+mean(data$X3)
+sd(data$X3)
+
+#correlation matrix
+cor(data)
+
+```
+Notes:
+explanation of rnorm_multi function: https://debruine.github.io/faux/articles/rnorm_multi.html
+
+
+### Step 2: Run the desired test on the first simulated dataset and try to extract the relevant p-values from the output
+
+```{r}
+#some reformatting 
+data <-
+data%>%
+  mutate(id = c(1:n))%>% #add numeric subject id variable
+  melt(id.vars = "id") #long format
+
+#set contrasts
+contrasts(data$variable) <- "contr.poly"
+
+#run a linear model and see the output
+results <- summary(lm(value~variable,data=data))
+
+results
+
+#linear trend is present here. How to access just the p-value for this trend? (needed later)
+#check the structure of the output with str()
+str(results)
+
+#looks like it could be in "coefficients": check
+results$coefficients
+
+#p-value for linear trend is in row 2, column 4, try to access just this (ignoring headings for counting)
+results$coefficients[2,4]
+
+#later we might want to check that there is also no quadratic trend - get this p-value too
+results$coefficients[3,4]
+```
+Notes:
+reshaping from wide to long format and back: https://www.statmethods.net/management/reshape.html
+
+
+### Step 3: actual power simulation
+
+We know how to simulate our data and how to access the statistic of interest. Now let's draw many samples instead of one.
+
+If the means and SDs specified above are the population parameters, how often will we find a significant linear trend (and no quadratic trends) in experiments with "n" participants?
+
+(we can try different values for n until power is satisfactory)
+
+```{r}
+n <- 80 #number of participants 
+
+nSim <- 1000 #number of simulations to run 
+
+#make an array to store the p-values from the simulation later
+#will contain only zeroes at first, and later be filled as we simulate data
+p_array <- array(0,dim=c(nSim,2)) #as many rows as iterations (nSim), two columns
+
+#now let's repeatedly ("nSim times") draw samples of size n from population and store p-values of trends in the prepared array
+#everything between the curly brackets will be done "nSim times"
+
+for (i in 1:nSim){
+  
+  #draw sample
+  data <- rnorm_multi(n = n,
+                      mu = c(m1,m2,m3),
+                      sd = sd,
+                      r = cor,
+                      empirical = F)
+  
+  #long format
+  data <-
+  data%>%
+  mutate(id = c(1:n))%>% #add numeric subject id variable
+  melt(id.vars = "id") #long format
+  
+  #set contrasts
+  contrasts(data$variable) <- "contr.poly"
+  
+  #run linear model, save p-value of linear trend to i-th row of pre-defined array (and to FIRST column)
+  p_array[i,1] <- summary(lm(value~variable,data=data))$coefficients[2,4]
+  
+  #run linear model, save p-value of quadratic trend to i-th row of pre-defined array (and to SECOND column)
+  p_array[i,2] <- summary(lm(value~variable,data=data))$coefficients[3,4]
+  
+}
+
+#lets look at our array of p-values:
+View(p_array)
+
+#How often was the linear trend significant with this sample size? (check first column of p_array)
+sum(p_array[,1]<=0.05)
+
+#divide by number of simulations to get the power
+sum(p_array[,1]<=0.05)/nSim
+
+#how often did we observe a linear trend and NO quadratic trend?
+sum(p_array[,1]<=0.05 & p_array[,2]>0.05)
+
+#divide by number of simulations to get the power
+sum(p_array[,1]<=0.05 & p_array[,2]>0.05)/nSim
+
+```
+
+Notes:
+
+How many simulations to run? https://debruine.github.io/posts/how-many-sims/
+Arrays and other types of structures in R: https://jamesmccaffrey.wordpress.com/2016/05/02/r-language-vectors-vs-arrays-vs-lists-vs-matrices-vs-data-frames/
+Equivalent to "count if" in excel: https://stackoverflow.com/questions/23000661/how-to-realize-countifs-function-excel-in-r/23000756
