@@ -1,0 +1,65 @@
+#check out the original
+
+library(praise)
+
+ 
+
+praise()
+
+ 
+
+#where do the words come from
+
+praise_parts
+
+ 
+
+names(praise_parts)
+
+ 
+
+#syntax of praise (use tab key!)
+
+ 
+
+praise()
+
+ 
+
+praise("You are ${adjective}!")
+
+ 
+
+praise("${exclamation}?")
+
+ 
+
+#capital vs small caps
+
+ 
+
+praise("${Exclamation}?")
+
+ 
+
+#create a lousy work-around
+
+Lob <- data.frame(Worte= c("toll", "super", "die Größte", "ein Ass"))
+
+ 
+
+paste("Du bist ",sample(Lob$Worte,1), "!", sep = "")
+
+ 
+
+#create a slightly less lousy work-around
+
+Kompliment <- function() {
+
+  #hier kommt der Code rein
+
+  paste("Du bist ",sample(Lob$Worte,1), "!", sep = "")
+
+}
+
+Kompliment()
