@@ -1,0 +1,156 @@
+---
+title: "Feedback results"
+author: "Annika Z."
+date: "`r Sys.time()`"
+output: html_notebook
+---
+<style type="text/css">body{font-size: 14pt;}</style>
+
+# {.tabset}
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+projectpath<-getwd()
+# packages needed
+require(ggplot2)
+require(cowplot)
+require(dplyr)
+require(tidytext)
+require(tokenizers)
+require(wordcloud)
+require(kableExtra)
+
+# custom function to only use data from the last x hours
+getsurveydata <- function(surveyname, lasthours = 2){
+  source(paste0(getwd(),'/connectformR.R'))
+  itemslist<-formr_items(survey_name = surveyname, 
+                        host = "https://formr.org")
+  res<-formr_raw_results(survey_name=surveyname, 
+                        host = "https://formr.org")
+  res[, c(2:4)] <-
+    sapply(X = res[, c(2:4)], FUN = as.POSIXlt) # convert to date
+  ressub <- subset(res, created >= as.POSIXlt(paste0(Sys.time() - (lasthours * 60 * 60))))
+  ressub <- subset(ressub, !is.na(currentmood)) # one non optional answer
+  return(ressub)
+}
+```
+
+
+
+hurray! ...
+**`r nrow(res)` **people answered
+
+***
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+res<-getsurveydata('littlepoll', lasthours = 5)
+min(res$created)
+```
+
+
+## Stimmungslage 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+require(ggplot2)
+p <- ggplot(res, aes(x = currentmood)) + 
+  geom_bar(fill = '#63B0DF') +
+  theme_minimal() +
+  theme(axis.text.x = element_blank()) + xlim(0.5, 8.5) + xlab("") + ylab("")
+require(cowplot)
+pimage <- axis_canvas(p, axis = 'x') + 
+  draw_image("https://formr.org/assets/tmp/admin/am0KYJ-I7VrTWbtbAqKXitUSAZT12sMFpk8X-5iY0skB.png?v1613463800", x = 0.5 ) +  # happy
+  draw_image("https://formr.org/assets/tmp/admin/YnU_cRwLNAcB2ELR8s0ZAHTsd0YD5GY2__LyQrDKFeT0.png?v1613463800", x = 1.5) +  # mindblown
+  draw_image("https://formr.org/assets/tmp/admin/755Li1BMx9HLio4Kyd4_94yjqfChYagcupZa-OXSgRyz.png?v1613463800", x = 2.5)+  # nerd
+  draw_image("https://formr.org/assets/tmp/admin/gmxZHu1WzaxeYIKaBbjJjbwk0thNoY-832hen2exPTw0.png?v1613463800", x = 3.5)+  # sceptico
+  draw_image("https://formr.org/assets/tmp/admin/YEM-fBgtmFqvlZ6ktARBVHUgsWluPSJp2uXJxxz-yvZE.png?v1613463800", x = 4.5)+  # shit
+  draw_image("https://formr.org/assets/tmp/admin/n5JNYPwYOUgkfr6c46pk8HI1FnZAZ5IZnh0Afn9GBy2r.png?v1613463800", x = 5.5)+  # crazy
+  draw_image("https://formr.org/assets/tmp/admin/xiKiiJ1ZRNngp_9fNoaW6VIXnJZc75E9kemHxoPT48bC.png?v1613463800", x = 6.5)+ # tired
+  draw_image("https://formr.org/assets/tmp/admin/sN0SjgdXdIqsKnbegQkKD6V-AWWrZ48bqJZMv4i80p0z.png?v1613463800", x = 7.5) # coffee
+
+ggdraw(insert_xaxis_grob(p, pimage, position = 'bottom'))
+```
+
+***
+
+## Speed of the Seminar
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+require(ggplot2)
+
+p <- ggplot(res, aes(x = slider)) + 
+  geom_histogram(aes(y = ..density..),fill = '#63B0DF', center = 50) + 
+  geom_density(fill = '#63B0DF', alpha = 0.1, adjust = 1) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank()) +
+  xlab("") +
+  ylab("") +
+  xlim(c(0,100))
+
+require(cowplot)
+pimage2 <- axis_canvas(p, axis = 'x') + 
+  draw_image(paste0(getwd(),"/emojis/turtoise.png"), x = 0, scale = 10 ) + #slow
+  draw_image(paste0(getwd(),"/emojis/rabbit.png"), x = 100, scale = 10 ) #fast
+
+ggdraw(insert_xaxis_grob(p, pimage2, position = 'bottom'))
+
+```
+
+***
+
+## Wishes for the next session
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+wishes <- subset(res, !is.na(wishesnextsession), select = wishesnextsession)
+
+require(dplyr)
+require(tidytext)
+# do the text cleaning
+dat <- iconv(wishes$wishesnextsession, from = 'UTF-8', to = 'ASCII//TRANSLIT')
+dat <- gsub("[^[:alpha:]]", " ", dat)
+df <- as.data.frame(dat)
+
+cleaned_txt <- df %>%
+  unnest_tokens(word, dat) %>%
+  anti_join(get_stopwords())%>%
+  dplyr::filter(nchar(word) > 2) %>%
+  count(word, sort = TRUE)
+
+if(nrow(wishes) != 0){
+  require(wordcloud)
+  pal <- brewer.pal(6,"Dark2")
+  wordcloud(words = cleaned_txt$word, 
+            freq = cleaned_txt$n, 
+            colors = pal, 
+            random.color = T, 
+            min.freq = 0)
+}else{
+    cat('no wishes')
+}
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+if(nrow(wishes) != 0){
+  require(kableExtra)
+  row.names(wishes) <- NULL
+  wishes%>%
+    kbl(format="html")%>%
+    kable_paper("striped", full_width = T)%>%
+    kable_styling(font_size = 22)
+}
+```
+
+
+***
+
+## Open questions
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+require(kableExtra)
+openquestions<-subset(res, !is.na(openquestion),select=openquestion)
+if(nrow(openquestions) == 0){
+  cat('no open questions')
+}else{
+  row.names(openquestions) <- NULL
+  openquestions %>%
+    kbl(format="html") %>%
+    kable_paper("striped", full_width = F) %>%
+    kable_styling(font_size = 22)
+}
+```

@@ -1,0 +1,115 @@
+---
+author: "Author: Annika Z."
+title: "![](header2.PNG)"
+output: html_notebook
+---
+<style type="text/css">body{font-size: 14pt; text-align: center;}</style>
+
+# {.tabset}
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+projectpath<-getwd()
+
+# packages needed
+require(ggplot2)
+require(cowplot)
+require(dplyr)
+require(kableExtra)
+plotcol = '#cc0099'# rladies colour "#88398a"
+
+# custom function to only use data from the last x hours
+getsurveydata <- function(surveyname, lasthours = 1){
+  source(paste0(getwd(),'/connectformR.R'))
+  res<-formr_raw_results(survey_name=surveyname, 
+                        host = "https://formr.org")
+  res[, c(2:4)] <-
+    sapply(X = res[, c(2:4)], FUN = as.POSIXlt) # convert to date
+  ressub <- subset(res, created >= as.POSIXlt(paste0(Sys.time() - (lasthours * 60 * 60))))
+  ressub <- subset(ressub, !is.na(pastapot))
+  return(ressub)
+}
+# script to create the map
+source('C:/Users/ziereis/ownCloud/otherstuff/R Ladies/lightningtalks/mapR.R')
+```
+
+
+
+### hurray! ... **`r nrow(res)` **people answered
+
+***
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# download data
+res<-getsurveydata("formRpolls",lasthours = 1)
+min(res$created)  # check "earliest" included participant
+```
+
+
+***
+
+# We are R-ladies from...
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+ourmap <- wherepeopleare(
+  peoplecities = res$city, # vector of cities that should be plotted
+  peoplecountries = res$selectcountry,  # countries (as some city names are the duplicate)
+  countcities = T,  # adjust point size of cities based on number of people
+  markbase = c("Germany","Gottingen"),  # reference point which is highlighted
+  wholeworld = T, # always plot whole world not only a subset
+  interactive = F  # use plotly to be able to zoom and display cities?
+)
+
+ourmap
+```
+
+***
+
+## Pasta or potatoes?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+require(ggplot2)
+p <- ggplot(res, aes(x = pastapot)) + 
+  geom_bar(fill = plotcol, width = 0.25) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank()) +xlim(0.75,2.25) + xlab("") + ylab("")
+require(cowplot)
+pimage <- axis_canvas(p, axis = 'x') + 
+  draw_image(paste0(getwd(),"/emojis/pasta.jpg"), x = 0.5) +  # happy
+  draw_image(paste0(getwd(),"/emojis/potatoes.jpg"), x = 1.5 )
+
+ggdraw(insert_xaxis_grob(p, pimage, position = 'bottom'))
+```
+
+***
+
+## R or python?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+if(length(res$rpy)>0){
+require(ggplot2)
+res$rpy <-
+  factor(
+    res$rpy,
+    levels = c(1, 2),
+    labels = c("R", "Python")
+  )
+
+
+res %>% group_by(rpy) %>% summarise(n = n()) %>% ggplot(aes(x = factor(1), y = n, fill = rpy)) +
+  geom_bar(stat = "identity") + coord_polar(theta = "y") + 
+  geom_text(
+    aes(label = n),
+    position = position_stack(vjust = 0.5),
+    col = "white",
+    size = 10
+  ) + xlab("") + ylab("") + theme(
+    panel.background = element_blank(),
+    axis.text = element_blank(),
+    axis.line = element_blank(),
+    panel.grid = element_blank()
+  ) + scale_fill_manual(values = c(plotcol,  "#a3a0a8")) + labs(fill = "")
+}else{
+  cat("nothing to plot here")
+}
+```
